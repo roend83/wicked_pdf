@@ -33,7 +33,7 @@ class WickedPdf
       stdin.close
       [stdout.read, stderr.read]
     end
-    raise "PDF could not be generated!" if pdf and pdf.rstrip.length == 0
+    raise "PDF could not be generated! See error below:\n#{err}" if pdf and pdf.rstrip.length == 0
     pdf
   rescue Exception => e
     raise "Failed to execute:\n#{command}\nError: #{e}"
@@ -67,7 +67,7 @@ class WickedPdf
       "--#{name.gsub('_', '-')} " + case type
         when :boolean then ""
         when :numeric then value.to_s
-        else "'#{value}'"
+        else value =~ /[\s\/]/ ? "'#{value}'" : value
       end + " "
     end
 
