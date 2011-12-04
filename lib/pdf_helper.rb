@@ -14,7 +14,7 @@ module PdfHelper
     if options.is_a?(Hash) && options.has_key?(:pdf)
       log_pdf_creation
       options[:basic_auth] = set_basic_auth(options)
-      make_and_send_pdf(options.delete(:pdf), (WickedPdf.config || {}).merge(options))
+      make_and_send_pdf(options.delete(:pdf), (WickedPdf.config.deep_dup || {}).deep_merge(options))
     else
       render_without_wicked_pdf(options, *args, &block)
     end
@@ -25,7 +25,7 @@ module PdfHelper
       log_pdf_creation
       options[:basic_auth] = set_basic_auth(options)
       options.delete :pdf
-      make_pdf((WickedPdf.config || {}).merge(options))
+      make_pdf((WickedPdf.config.deep_dup || {}).deep_merge(options))
     else
       render_to_string_without_wicked_pdf(options, *args, &block)
     end
@@ -43,16 +43,23 @@ module PdfHelper
         request.env["HTTP_AUTHORIZATION"].split(" ").last
       end
     end
+	
+	def add_temp_file(name)
+    WickedPdfTempfile.new(name).tap do |tf|
+      (@temp_files ||= []).push(tf)
+    end
+	end
 
     def clean_temp_files
-      if defined?(@hf_tempfiles)
-        @hf_tempfiles.each { |tf| tf.close! }
+      if defined?(@temp_files)
+        @temp_files.each{ |tf| tf.close! }
       end
     end
 
     def make_pdf(options = {})
       html_string = render_to_string(:template => options[:template], :layout => options[:layout])
       options = prerender_header_and_footer(options)
+      options = prerender_cover(options)
       w = WickedPdf.new(options[:wkhtmltopdf])
       w.pdf_from_string(html_string, options)
     end
@@ -75,15 +82,28 @@ module PdfHelper
     # to temp files and return a new options hash including the URLs to these files.
     def prerender_header_and_footer(options)
       [:header, :footer].each do |hf|
-        if options[hf] && options[hf][:html] && options[hf][:html][:template]
-          @hf_tempfiles = [] if ! defined?(@hf_tempfiles)
-          @hf_tempfiles.push( tf=WickedPdfTempfile.new("wicked_#{hf}_pdf.html") )
-          tf.write render_to_string(:template => options[hf][:html][:template], :layout => options[:layout], :locals => options[hf][:html][:locals])
+        if options[hf] && options[hf][:html] && template = options[hf][:html][:template]
+          tf = add_temp_file("wicked_#{hf}_pdf.html")
+          tf.write render_to_string(:template => template.clone, :layout => options[:layout], :locals => options[hf][:html][:locals])
           tf.flush
           options[hf][:html].delete(:template)
-          options[hf][:html][:url] = "file://#{tf.path}"
+          options[hf][:html][:url] = local_file_path(tf.path)
         end
       end
       options
+    end
+	
+    def prerender_cover(options)
+      if (cover_options = options[:cover]) && cover_options.is_a?(Hash) && (template = cover_options[:template])
+        tf = add_temp_file("wicked_cover_pdf.html")
+        tf.write render_to_string(:template => template.clone, :layout => options[:layout], :locals => cover_options[:locals])
+        tf.flush
+        options[:cover] = local_file_path(tf.path)
+      end
+	  options
+    end
+	
+    def local_file_path(path)
+      "file://#{path[0] == '/' ? nil : '/'}#{path}"
     end
 end

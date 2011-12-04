@@ -23,7 +23,7 @@ class WickedPdf
   end
 
   def pdf_from_string(string, options={})
-    command = "#{@exe_path} #{parse_options(options)} -q - - " # -q for no errors on stdout
+    command = "#{@exe_path} #{parse_options(options)} -q #{parse_cover(options)} - - " # -q for no errors on stdout
     p "*"*15 + command + "*"*15 unless defined?(Rails) and Rails.env != 'development'
     pdf, err = Open3.popen3(command) do |stdin, stdout, stderr|
       stdin.binmode
@@ -40,7 +40,11 @@ class WickedPdf
   end
 
   private
-
+ 
+    def parse_cover(options)
+      "cover #{options[:cover]}" if options[:cover]
+    end
+  
     def parse_options(options)
       [
         parse_header_footer(:header => options.delete(:header),
@@ -136,7 +140,6 @@ class WickedPdf
                                     :proxy,
                                     :username,
                                     :password,
-                                    :cover,
                                     :dpi,
                                     :encoding,
                                     :user_style_sheet])
